@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning"
+           elementFormDefault="qualified"
+           vc:minVersion="1.1">
+
+    <!-- ===================================================================== -->
+    <!-- Root Element Definition -->
+    <!-- ===================================================================== -->
+    <xs:element name="{{ root_element }}">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element ref="prefab" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ===================================================================== -->
+    <!-- Component Definitions -->
+    <!-- ===================================================================== -->
+    {% for component in components %}
+    <xs:complexType name="{{ component.absolute_name }}">
+        <xs:sequence>
+            {% for member in component.members %}
+            <xs:element name="{{ member.name }}" type="{{ member.type }}"/>
+            {% endfor %}
+            {% if component.children %}
+            <xs:element ref="component" minOccurs="0" maxOccurs="unbounded"/>
+            {% endif %}
+        </xs:sequence>
+        <xs:attribute name="mytype" type="xs:string" use="required" fixed="{{ component.name }}"/>
+    </xs:complexType>
+    {% endfor %}
+
+    <!-- Define a default (base) type for the component element. This is required for default argument -->
+    <xs:complexType name="component_default"/>
+
+    <!-- Instantiate the components -->
+    <xs:element name="component">
+        {% for component in components %}
+        <xs:alternative test="@mytype='{{ component.name }}'" type="{{ component.absolute_name }}"/>
+        {% endfor %}
+        <xs:alternative type="component_default"/>
+    </xs:element>
+
+
+    <!-- ===================================================================== -->
+    <!-- Prefab Definitions -->
+    <!-- ===================================================================== -->
+    {% for prefab in prefabs %}
+    <xs:complexType name="{{ prefab.absolute_name }}">
+        <xs:sequence>
+            <xs:element ref="component" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="mytype" type="xs:string" use="required" fixed="{{ prefab.name }}"/>
+        {% for child in prefab.children %}
+        <xs:assert test="component[{{ loop.index }}]/@mytype = '{{ child }}'"/>
+        {% endfor %}
+    </xs:complexType>
+    {% endfor %}
+
+    <!-- Instantiate the prefabs -->
+    <xs:element name="prefab">
+        {% for prefab in prefabs %}
+        <xs:alternative test="@mytype='{{ prefab.name }}'" type="{{ prefab.absolute_name }}"/>
+        {% endfor %}
+    </xs:element>
+    
+</xs:schema>

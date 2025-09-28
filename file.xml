@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+<prefab mytype="a">
+    <component mytype="b">
+        <value1>3.2</value1>
+        <value2>text</value2>
+        <value3>3</value3>
+    </component>
+    <component mytype="c">
+        <value1>1</value1>
+        <value2>more text</value2>
+        <value3>7.5</value3>
+    </component>
+</prefab>
+<prefab mytype="b">
+    <component mytype="b">
+        <value1>4.5</value1>
+        <value2>other text</value2>
+        <value3>9</value3>
+    </component>
+    <component mytype="d">
+        <value1>3</value1>
+        <component mytype="e">
+            <value1>asdf</value1>
+            <value2>5.5</value2>
+        </component>
+    </component>
+</prefab>
+<prefab mytype="c">
+    <component mytype="f">
+        <value1>text 1</value1>
+        <value2>text again</value2>
+    </component>
+</prefab>
+</root>
+
+
