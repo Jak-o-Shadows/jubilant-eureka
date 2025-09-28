@@ -28,7 +28,7 @@
             <xs:element ref="component" minOccurs="0" maxOccurs="unbounded"/>
             {% endif %}
         </xs:sequence>
-        <xs:attribute name="mytype" type="xs:string" use="required" fixed="{{ component.name }}"/>
+        <xs:attribute name="type" type="xs:string" use="required" fixed="{{ component.name }}"/>
     </xs:complexType>
     {% endfor %}
 
@@ -38,7 +38,7 @@
     <!-- Instantiate the components -->
     <xs:element name="component">
         {% for component in components %}
-        <xs:alternative test="@mytype='{{ component.name }}'" type="{{ component.absolute_name }}"/>
+        <xs:alternative test="@type='{{ component.name }}'" type="{{ component.absolute_name }}"/>
         {% endfor %}
         <xs:alternative type="component_default"/>
     </xs:element>
@@ -52,9 +52,9 @@
         <xs:sequence>
             <xs:element ref="component" minOccurs="0" maxOccurs="unbounded"/>
         </xs:sequence>
-        <xs:attribute name="mytype" type="xs:string" use="required" fixed="{{ prefab.name }}"/>
+        <xs:attribute name="type" type="xs:string" use="required" fixed="{{ prefab.name }}"/>
         {% for child in prefab.children %}
-        <xs:assert test="component[{{ loop.index }}]/@mytype = '{{ child }}'"/>
+        <xs:assert test="component[{{ loop.index }}]/@type = '{{ child }}'"/>
         {% endfor %}
     </xs:complexType>
     {% endfor %}
@@ -62,7 +62,7 @@
     <!-- Instantiate the prefabs -->
     <xs:element name="prefab">
         {% for prefab in prefabs %}
-        <xs:alternative test="@mytype='{{ prefab.name }}'" type="{{ prefab.absolute_name }}"/>
+        <xs:alternative test="@type='{{ prefab.name }}'" type="{{ prefab.absolute_name }}"/>
         {% endfor %}
     </xs:element>
     

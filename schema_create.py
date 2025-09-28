@@ -47,7 +47,7 @@ def infer_ecs_type(element):
 def get_element_type_name(element):
     """Creates a unique type name from tag and 'type' attribute if it exists."""
     tag = element.tag
-    type_attr = element.attrib.get("mytype")
+    type_attr = element.attrib.get("type")
     if type_attr:
         # Sanitize attribute value for use in a type name
         safe_type_attr = "".join(c if c.isalnum() else '_' for c in type_attr)
@@ -73,9 +73,9 @@ def analyze_element(element, prefabs, components):
             #   The prefab itself is a container - the sub-elements are defined separately
             #   in the xsd
             definition = {
-                "name": element.attrib.get("mytype"),
+                "name": element.attrib.get("type"),
                 "absolute_name": current_type_name,
-                'children': [child.attrib.get("mytype") for child in element if infer_ecs_type(child) == 'component']
+                'children': [child.attrib.get("type") for child in element if infer_ecs_type(child) == 'component']
             }
             prefabs[current_type_name] = definition
 
@@ -84,7 +84,7 @@ def analyze_element(element, prefabs, components):
             #   The component is defined in the XSD, with any child components defined
             #   separately in the xsd
             definition = {
-                "name": element.attrib.get("mytype"),
+                "name": element.attrib.get("type"),
                 "absolute_name": current_type_name,
                 "members": [],
                 "children": []
