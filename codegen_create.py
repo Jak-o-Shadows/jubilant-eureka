@@ -24,6 +24,15 @@ def map_xsd_to_python_type(xsd_type: str) -> str:
     }
     return type_map.get(xsd_type, "str")  # Default to string for unknown types
 
+def map_xsd_to_matlab_caster(xsd_type: str) -> str:
+    """Maps XSD simple types to MATLAB casting functions."""
+    type_map = {
+        "xs:string": "string",
+        "xs:integer": "str2double",
+        "xs:decimal": "str2double",
+    }
+    return type_map.get(xsd_type, "string")  # Default to string
+
 
 if __name__ == "__main__":
     filepath_schema = "generated_schema.xsd"
@@ -64,6 +73,7 @@ if __name__ == "__main__":
                     definition["simple_members"].append({
                         "prop_name": to_snake_case(child_elem.name),
                         "py_type": map_xsd_to_python_type(child_elem.type.prefixed_name),
+                        "matlab_caster": map_xsd_to_matlab_caster(child_elem.type.prefixed_name),
                         "tag_name": child_elem.name,
                     })
         
@@ -90,3 +100,23 @@ if __name__ == "__main__":
         f.write(generated_code)
 
     print(f"Code generation complete. Bindings saved to '{output_file}'.")
+
+    # --- MATLAB Binding Generation ---
+    print("\nGenerating MATLAB bindings...")
+    matlab_output_file = "bindings.m"
+    matlab_template_name = "codegen.m.j2"
+    
+    # Get a list of component names for the Entity class to use
+    # We can reuse the component_definitions list from the Python generation step.
+    component_names = [f"'{c['tag_name']}'" for c in component_definitions if c['tag_name'] != 'entitytag']
+
+    matlab_template = env.get_template(matlab_template_name)
+    matlab_generated_code = matlab_template.render(
+        components=component_definitions,
+        component_names=f"{{{', '.join(component_names)}}}"
+    )
+
+    with open(matlab_output_file, "w", encoding="utf-8") as f:
+        f.write(matlab_generated_code)
+
+    print(f"MATLAB code generation complete. Bindings saved to '{matlab_output_file}'.")
