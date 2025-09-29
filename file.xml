@@ -36,6 +36,10 @@
         <value2>text again</value2>
     </ftag>
 </entitytag>
+<ztag type="z">
+    <asdf>asdf</asdf>
+    <vv33>33</vv33>
+</ztag>
 </root>
 
 
