@@ -1,37 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <root>
-<prefab type="a">
-    <component type="b">
+<entitytag type="entity">
+    <btag type="b">
         <value1>3.2</value1>
         <value2>text</value2>
         <value3>3</value3>
-    </component>
-    <component type="c">
+    </btag>
+    <ctag type="c">
         <value1>1</value1>
         <value2>more text</value2>
         <value3>7.5</value3>
-    </component>
-</prefab>
-<prefab type="b">
-    <component type="b">
+    </ctag>
+    <prefab>asdfaf</prefab>
+    <blah>3.0</blah>
+</entitytag>
+<entitytag type="entity">
+    <btag type="b">
         <value1>4.5</value1>
         <value2>other text</value2>
         <value3>9</value3>
-    </component>
-    <component type="d">
+    </btag>
+    <dtag type="d">
         <value1>3</value1>
-        <component type="e">
+        <etag type="e">
             <value1>asdf</value1>
             <value2>5.5</value2>
-        </component>
-    </component>
-</prefab>
-<prefab type="c">
-    <component type="f">
+        </etag>
+    </dtag>
+    <prefab>asdfaf22</prefab>
+    <blah>3.5</blah>
+</entitytag>
+<entitytag type="entity">
+    <ftag type="f">
         <value1>text 1</value1>
         <value2>text again</value2>
-    </component>
-</prefab>
+    </ftag>
+</entitytag>
 </root>
 
 

@@ -30,19 +30,19 @@ def infer_data_type(value):
     return "xs:string"
 
 def infer_ecs_type(element):
-    """Infer what ECS type this elemetn is
+    """Infer what ECS type this element is
 
-    Prefabs and Components are distinguished by their tag.
-    Component members (ie. struct members) are distinguished by tag only
+    If it has a type, and children, it is an component
     """
-    match element.tag:
-        case "prefab":
-            ecs_type = "prefab"
-        case "component":
+    if element.attrib.get("type"):
+        if element.tag == "entitytag":
+            ecs_type = "entity"
+        else:
             ecs_type = "component"
-        case _:
-            ecs_type = "value"
+    else:
+        ecs_type = "value"
     return ecs_type
+
 
 def get_element_type_name(element):
     """Creates a unique type name from tag and 'type' attribute if it exists."""
@@ -55,54 +55,61 @@ def get_element_type_name(element):
     return f"{tag}Type"
 
 
-def analyze_element(element, prefabs, components):
+def analyze_element(element, entities, components, flat):
     """
     Analyzes an XML element and recursively analyzes its children to build schema definitions.
     """
     current_type_name = get_element_type_name(element)
 
     # If we have already processed this exact type, we can skip it.
-    if current_type_name in prefabs or current_type_name in components:
+    if current_type_name in entities or current_type_name in components or current_type_name in flat:
         return
 
     # Determine what type this element is
     ecs_type = infer_ecs_type(element)
     match ecs_type:
-        case "prefab":
-            # As a prefab, must look at it's children. They can be components or values
-            #   The prefab itself is a container - the sub-elements are defined separately
-            #   in the xsd
-            definition = {
-                "name": element.attrib.get("type"),
-                "absolute_name": current_type_name,
-                'children': [child.attrib.get("type") for child in element if infer_ecs_type(child) == 'component']
-            }
-            prefabs[current_type_name] = definition
-
+        case "entity":
+            # Entities can contain any of the components. Because of this, pretty damn hard
+            #   to provide a schema for them
+            pass
         case "component":
             # As a component, must look at it's children. They can be components or values
             #   The component is defined in the XSD, with any child components defined
             #   separately in the xsd
             definition = {
-                "name": element.attrib.get("type"),
+                "name": element.tag,
                 "absolute_name": current_type_name,
+                "ecs_type": element.attrib.get("type"),
                 "members": [],
                 "children": []
             }
             for child in element:
                 if infer_ecs_type(child) == "component":
-                    definition["children"].append(get_element_type_name(child))
+                    definition["children"].append({
+                        "name": child.tag,
+                        "type": get_element_type_name(child)
+                    })
                 else:  # It's a value/member field
                     definition['members'].append({
                         "name": child.tag,
                         "type": infer_data_type(child.text)
                     })
             components[current_type_name] = definition
+        case "value":
+            # Only add them if their parent isn't a component
+            # as they will be defined locally within the component's complexType.
+            if element.getparent() is not None and infer_ecs_type(element.getparent()) != "component":
+                definition = {
+                "name": element.tag,
+                "absolute_name": current_type_name,
+                "type": infer_data_type(element.text)
+                }
+                flat[current_type_name] = definition
 
     # After processing the current element, recurse into its children
-    # to ensure their types are also defined.
+    # to ensure their definitions are also created.
     for child in element:
-        analyze_element(child, prefabs, components)
+        analyze_element(child, entities, components, flat)
 
             
 
@@ -130,19 +137,21 @@ def generate_schema(xml_file_path, template_dir, template_name):
         return None
 
     # These dictionaries will hold the definitions for each unique type
-    prefabs = {}
+    entities = {}
     components = {}
+    flat = {}
     # Recurse over the children of the root, as root itself is not defined in the XSD
     for child in root:
-        analyze_element(child, prefabs, components)
+        analyze_element(child, entities, components, flat)
 
 
     template_context = {
-        'root_element': root.tag,
+        "root_element": root.tag,
         # Reverse the order to have the innermost appear first, in order to satisfy dependencies
         #   Yes, this relies on dicts being ordered, which they are now
-        'prefabs': list(prefabs.values())[::-1],
-        'components': list(components.values())[::-1],
+        "entities": list(entities.values())[::-1],
+        "components": list(components.values())[::-1],
+        "flat": list(flat.values())[::-1]
     }
 
     # Set up Jinja2 environment

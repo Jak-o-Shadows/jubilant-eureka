@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning"
-           elementFormDefault="qualified"
-           vc:minVersion="1.1">
+           elementFormDefault="qualified">
 
     <!-- ===================================================================== -->
     <!-- Root Element Definition -->
@@ -10,60 +9,48 @@
     <xs:element name="{{ root_element }}">
         <xs:complexType>
             <xs:sequence>
-                <xs:element ref="prefab" minOccurs="0" maxOccurs="unbounded"/>
+                <xs:element ref="entitytag" minOccurs="0" maxOccurs="unbounded"/>
             </xs:sequence>
         </xs:complexType>
     </xs:element>
 
     <!-- ===================================================================== -->
+    <!-- Simple Tag Definitions -->
+    <!-- These are often found as the direct children of root or of <entitytag> -->
+    <!-- ===================================================================== -->
+    {% for tag in flat %}
+    <xs:element name="{{ tag.name }}" type="{{ tag.type }}"/>
+    {% endfor %}
+
+    <!-- ===================================================================== -->
     <!-- Component Definitions -->
     <!-- ===================================================================== -->
     {% for component in components %}
-    <xs:complexType name="{{ component.absolute_name }}">
-        <xs:sequence>
-            {% for member in component.members %}
-            <xs:element name="{{ member.name }}" type="{{ member.type }}"/>
-            {% endfor %}
-            {% if component.children %}
-            <xs:element ref="component" minOccurs="0" maxOccurs="unbounded"/>
-            {% endif %}
-        </xs:sequence>
-        <xs:attribute name="type" type="xs:string" use="required" fixed="{{ component.name }}"/>
-    </xs:complexType>
-    {% endfor %}
-
-    <!-- Define a default (base) type for the component element. This is required for default argument -->
-    <xs:complexType name="component_default"/>
-
-    <!-- Instantiate the components -->
-    <xs:element name="component">
-        {% for component in components %}
-        <xs:alternative test="@type='{{ component.name }}'" type="{{ component.absolute_name }}"/>
-        {% endfor %}
-        <xs:alternative type="component_default"/>
+    <xs:element name="{{ component.name }}">
+        <xs:complexType>
+            <xs:sequence>
+                {% for member in component.members %}
+                <xs:element name="{{ member.name }}" type="{{ member.type }}"/>
+                {% endfor %}
+                {% for child in component.children %}
+                <xs:element ref="{{ child.name }}"/>
+                {% endfor %}
+            </xs:sequence>
+            <xs:attribute name="type" type="xs:string" use="required" fixed="{{ component.ecs_type }}"/>
+        </xs:complexType>
     </xs:element>
-
-
-    <!-- ===================================================================== -->
-    <!-- Prefab Definitions -->
-    <!-- ===================================================================== -->
-    {% for prefab in prefabs %}
-    <xs:complexType name="{{ prefab.absolute_name }}">
-        <xs:sequence>
-            <xs:element ref="component" minOccurs="0" maxOccurs="unbounded"/>
-        </xs:sequence>
-        <xs:attribute name="type" type="xs:string" use="required" fixed="{{ prefab.name }}"/>
-        {% for child in prefab.children %}
-        <xs:assert test="component[{{ loop.index }}]/@type = '{{ child }}'"/>
-        {% endfor %}
-    </xs:complexType>
     {% endfor %}
 
-    <!-- Instantiate the prefabs -->
-    <xs:element name="prefab">
-        {% for prefab in prefabs %}
-        <xs:alternative test="@type='{{ prefab.name }}'" type="{{ prefab.absolute_name }}"/>
-        {% endfor %}
+    <!-- ===================================================================== -->
+    <!-- Entity Definitions -->
+    <!-- ===================================================================== -->
+    <xs:element name="entitytag">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:any minOccurs="0" maxOccurs="unbounded" processContents="lax"/>
+            </xs:sequence>
+            <xs:attribute name="type" type="xs:string" use="required" fixed="entity"/>
+        </xs:complexType>
     </xs:element>
     
 </xs:schema>
