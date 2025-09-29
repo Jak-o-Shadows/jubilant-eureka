@@ -1,0 +1,100 @@
+import functools
+import typing
+
+import lxml.etree
+
+
+class Component:
+    """
+    Base class for a component wrapper around an lxml element.
+    """
+    def __init__(self, element: lxml.etree._Element):
+        self._element = element
+
+# Late import to avoid circular dependency: binding_util.File -> generated_bindings -> binding_util.cached_property
+import binding_util
+
+
+
+
+{% for component in components %}
+class {{ component.class_name }}(Component):
+    """
+    Represents the <{{ component.tag_name }}> component.
+    """
+    # Simple member properties
+{% if component.tag_name == 'entitytag' %}
+    def __getattr__(self, name: str):
+        """
+        Dynamically access child components or simple values within this entity.
+        e.g., `my_entity.btag` or `my_entity.prefab`
+        """
+        # Check if it's a known component type
+        if name in TAG_TO_CLASS_MAP:
+            component_class = TAG_TO_CLASS_MAP[name]
+            element = self._element.find(name)
+            if element is not None:
+                return component_class(element)
+            return None
+
+        # Check if it's a known simple type
+        if name in SIMPLE_TYPE_MAP:
+            py_type = SIMPLE_TYPE_MAP[name]
+            element = self._element.find(name)
+            if element is not None and element.text is not None:
+                return py_type(element.text)
+            return None
+
+        # Fallback to default behavior
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+{% else %}
+{% for member in component.simple_members %}
+    @binding_util.cached_property
+    def {{ member.prop_name }}(self) -> {{ member.py_type }}:
+        """Gets the value of the <{{ member.tag_name }}> child element."""
+        # Assumes the element always exists, per the schema.
+        # .text will raise an AttributeError if find() returns None.
+        value = self._element.find("{{ member.tag_name }}").text
+        return {{ member.py_type }}(value) # Casts the string value to the correct type.
+
+    @{{ member.prop_name }}.setter
+    def {{ member.prop_name }}(self, value: {{ member.py_type }}):
+        """Sets the value of the <{{ member.tag_name }}> child element."""
+        # Assumes the element always exists.
+        elem = self._element.find("{{ member.tag_name }}")
+        elem.text = str(value)
+
+{% endfor %}
+{% if component.sub_components %}
+    # Sub-component accessors
+{% endif %}
+{% for sub in component.sub_components %}
+    @property
+    def {{ sub.prop_name }}(self) -> {{ sub.class_name }}:
+        """Accessor for the <{{ sub.tag_name }}> sub-component."""
+        # Assumes the sub-component always exists.
+        elem = self._element.find("{{ sub.tag_name }}")
+        return {{ sub.class_name }}(elem) # Wrap the found element in its class.
+
+{% endfor %}
+{% if not component.simple_members and not component.sub_components %}
+    pass  # No members or sub-components defined in schema
+{% endif %}
+{% endif %}
+
+{% endfor %}
+
+# These mappings defined last in order for their type's to be defined
+{# Create a mapping from tag names to the generated classes for dynamic lookup #}
+TAG_TO_CLASS_MAP = {
+{% for component in components %}
+    "{{ component.tag_name }}": {{ component.class_name }},
+{% endfor %}
+}
+
+{# Create a mapping from simple element tag names to their Python types #}
+SIMPLE_TYPE_MAP = {
+{% for name, py_type in simple_type_map.items() %}
+    "{{ name }}": {{ py_type }},
+{% endfor %}
+}
