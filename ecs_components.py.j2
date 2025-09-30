@@ -1,0 +1,29 @@
+"""
+Generated tcod-ecs components from schema.
+DO NOT EDIT.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+{% for component in components %}
+@dataclass(frozen=True, slots=True)
+class {{ component.class_name }}:
+    """
+    Represents the <{{ component.tag_name }}> component.
+    """
+{% for member in component.simple_members %}
+    {{ member.prop_name }}: {{ member.py_type }}
+{% endfor %}
+{% if not component.simple_members %}
+    pass  # This component has no data fields.
+{% endif %}
+
+
+{% endfor %}
+COMPONENT_MAP = {
+{% for component in components %}
+    "{{ component.tag_name }}": {{ component.class_name }},
+{% endfor %}
+}
