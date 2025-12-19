@@ -9,8 +9,13 @@
     <xs:element name="{{ root_element }}">
         <xs:complexType>
             <xs:all>
-                <xs:element ref="entitytag" minOccurs="1" maxOccurs="unbounded"/>
-                <xs:any minOccurs="0" maxOccurs="unbounded"/>
+                <xs:element ref="{{ entity_base_name }}" minOccurs="1" maxOccurs="unbounded"/>
+                {% for definition in root_children_defs %}
+                <xs:element ref="{{ definition.name }}" minOccurs="0" maxOccurs="unbounded"/>
+                {% endfor %}
+                {% for tag in flat %}
+                <xs:element ref="{{ tag.name }}" minOccurs="0" maxOccurs="unbounded"/>
+                {% endfor %}
             </xs:all>
         </xs:complexType>
     </xs:element>
@@ -24,34 +29,84 @@
     {% endfor %}
 
     <!-- ===================================================================== -->
-    <!-- Component Definitions -->
+    <!-- DataDef (Container) Definitions -->
     <!-- ===================================================================== -->
-    {% for component in components %}
-    <xs:element name="{{ component.name }}">
+    {% for datadef in datadefs %}
+    <xs:element name="{{ datadef.name }}">
         <xs:complexType>
             <xs:sequence>
-                {% for member in component.members %}
+                {% for member in datadef.members %}
                 <xs:element name="{{ member.name }}" type="{{ member.type }}"/>
                 {% endfor %}
-                {% for child in component.children %}
+                {% for child in datadef.children %}
                 <xs:element ref="{{ child.name }}"/>
                 {% endfor %}
             </xs:sequence>
-            <xs:attribute name="type" type="xs:string" use="required" fixed="{{ component.ecs_type }}"/>
+            <xs:attribute name="type" type="xs:string" use="required" fixed="{{ datadef.ecs_type }}"/>
         </xs:complexType>
     </xs:element>
     {% endfor %}
 
     <!-- ===================================================================== -->
-    <!-- Entity Definitions -->
+    <!-- Component Definitions (using alternatives for variants) -->
     <!-- ===================================================================== -->
-    <xs:element name="entitytag">
-        <xs:complexType>
-            <xs:sequence>
-                <xs:any minOccurs="0" maxOccurs="unbounded" processContents="lax"/>
-            </xs:sequence>
-            <xs:attribute name="type" type="xs:string" use="required" fixed="entity"/>
-        </xs:complexType>
+    <!-- 1. Base type for all components -->
+    <xs:complexType name="componentBaseType">
+      <xs:attribute name="type" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <!-- 2. Define the specific complexType for each component variant by extension -->
+    {% for component in components %}
+    <xs:complexType name="{{ component.absolute_name }}">
+        <xs:complexContent>
+            <xs:extension base="componentBaseType">
+                <xs:sequence>
+                    {% for child in component.children %}
+                    <xs:element ref="{{ child.name }}"/>
+                    {% endfor %}
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    {% endfor %}
+
+    <!-- 3. Define the single <component> element with alternatives based on 'type' attribute -->
+    <xs:element name="component" type="componentBaseType">
+        {% for component in components %}
+        <xs:alternative test="@type = '{{ component.ecs_type }}'" type="{{ component.absolute_name }}"/>
+        {% endfor %}
+    </xs:element>
+
+    <!-- ===================================================================== -->
+    <!-- Entity Definitions -->
+    <!-- Using xs:alternative to provide a different type for each entity variant. -->
+    <!-- ===================================================================== -->
+    <!-- 1. Base type for all entities -->
+    <xs:complexType name="entityBaseType">
+        <xs:attribute name="type" type="xs:string" use="required" fixed="entity"/>
+        <xs:attribute name="variant" type="xs:string" use="optional"/>
+    </xs:complexType>
+
+    <!-- 2. Define the specific complexType for each entity variant by extension -->
+    {% for entity_variant in entities %}
+    <xs:complexType name="{{ entity_variant.variant_type_name }}">
+        <xs:complexContent>
+            <xs:extension base="entityBaseType">
+                <xs:all>
+                    {% for child_def in entity_variant.children|sort(attribute='name') %}
+                    <xs:element ref="{{ child_def.name }}" maxOccurs="{{ child_def.maxOccurs }}"/>
+                    {% endfor %}
+                </xs:all>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    {% endfor %}
+
+    <!-- 3. Define the single <entitytag> element with alternatives -->
+    <xs:element name="{{ entity_base_name }}" type="entityBaseType">
+        {% for entity_variant in entities %}
+        <xs:alternative test="@variant = '{{ entity_variant.variant_name }}'" type="{{ entity_variant.variant_type_name }}"/>
+        {% endfor %}
     </xs:element>
     
 </xs:schema>

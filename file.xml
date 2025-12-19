@@ -1,40 +1,48 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <root>
-<entitytag type="entity">
-    <btag type="b">
-        <value1>3.2</value1>
-        <value2>text</value2>
-        <value3>3</value3>
-    </btag>
-    <ctag type="c">
-        <value1>1</value1>
-        <value2>more text</value2>
-        <value3>7.5</value3>
-    </ctag>
+<entitytag type="entity" variant="x">
+    <component type="comp1">
+        <btag type="b">
+            <value1>3.2</value1>
+            <value2>text</value2>
+            <value3>3</value3>
+        </btag>
+        <ctag type="c">
+            <value1>1</value1>
+            <value2>more text</value2>
+            <value3>7.5</value3>
+        </ctag>
+    </component>
     <prefab>asdfaf</prefab>
     <blah>3.0</blah>
 </entitytag>
-<entitytag type="entity">
-    <btag type="b">
-        <value1>4.5</value1>
-        <value2>other text</value2>
-        <value3>9</value3>
-    </btag>
-    <dtag type="d">
-        <value1>3</value1>
-        <etag type="e">
-            <value1>asdf</value1>
-            <value2>5.5</value2>
-        </etag>
-    </dtag>
+<entitytag type="entity" variant="y">
+    <component type="comp2">
+        <btag type="b">
+            <value1>4.5</value1>
+            <value2>other text</value2>
+            <value3>9</value3>
+        </btag>
+    </component>
+    <component type="comp3">
+        <dtag type="d">
+            <value1>3</value1>
+            <etag type="e">
+                <value1>asdf</value1>
+                <value2>5.5</value2>
+            </etag>
+        </dtag>
+    </component>
     <prefab>asdfaf22</prefab>
     <blah>3.5</blah>
 </entitytag>
-<entitytag type="entity">
-    <ftag type="f">
-        <value1>text 1</value1>
-        <value2>text again</value2>
-    </ftag>
+<entitytag type="entity" variant="z">
+    <component type="comp4">
+        <ftag type="f">
+            <value1>text 1</value1>
+            <value2>text again</value2>
+        </ftag>
+    </component>
 </entitytag>
 <ztag type="z">
     <asdf>asdf</asdf>

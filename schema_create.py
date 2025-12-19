@@ -3,7 +3,7 @@ import os
 import lxml
 import lxml.etree
 from jinja2 import Environment, FileSystemLoader
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 
 def infer_data_type(value):
@@ -32,16 +32,18 @@ def infer_data_type(value):
 def infer_ecs_type(element):
     """Infer what ECS type this element is
 
-    If it has a type, and children, it is an component
+    If it is an entitytag, it is an entity
+    If it is a component, it is a component
+    If it has children, it is a container for data
+    otherwise, it is a value
     """
-    if element.attrib.get("type"):
-        if element.tag == "entitytag":
-            ecs_type = "entity"
-        else:
-            ecs_type = "component"
-    else:
-        ecs_type = "value"
-    return ecs_type
+    if element.tag == "entitytag":
+        return "entity"
+    if element.tag == "component":
+        return "component"
+    if len(element):
+        return "datadef"
+    return "value"
 
 
 def get_element_type_name(element):
@@ -55,23 +57,43 @@ def get_element_type_name(element):
     return f"{tag}Type"
 
 
-def analyze_element(element, entities, components, flat):
+def analyze_element(element, entities, components, datadefs, flat):
     """
     Analyzes an XML element and recursively analyzes its children to build schema definitions.
     """
     current_type_name = get_element_type_name(element)
 
-    # If we have already processed this exact type, we can skip it.
-    if current_type_name in entities or current_type_name in components or current_type_name in flat:
-        return
-
     # Determine what type this element is
     ecs_type = infer_ecs_type(element)
+    if ecs_type != "entity":
+        # If we have already processed this exact type, we can skip it.
+        #    As entites reuse tags, must always process them
+        if current_type_name in entities or current_type_name in components or current_type_name in datadefs or current_type_name in flat:
+            return
+
+
     match ecs_type:
         case "entity":
-            # Entities can contain any of the components. Because of this, pretty damn hard
-            #   to provide a schema for them
-            pass
+            # For xs:alternative, we need to define each unique entity structure as a separate type.
+            # We'll create a variant name based on the sorted list of its child tags.
+            child_tag_counts = Counter(child.tag for child in element)
+            children_defs = []
+            for tag, count in child_tag_counts.items():
+                max_occurs = "unbounded" if count > 1 else "1"
+                children_defs.append({"name": tag, "maxOccurs": max_occurs})
+
+            child_tags = children_defs
+            variant_name = element.attrib.get("variant")
+            variant_type_name = f"entity_{variant_name}_type"
+
+            # Only define this variant if we haven't seen it before.
+            if variant_type_name not in entities:
+                entities[variant_type_name] = {
+                    "name": element.tag,
+                    "variant_name": variant_name,
+                    "variant_type_name": variant_type_name,
+                    "children": child_tags
+                }
         case "component":
             # As a component, must look at it's children. They can be components or values
             #   The component is defined in the XSD, with any child components defined
@@ -84,7 +106,8 @@ def analyze_element(element, entities, components, flat):
                 "children": []
             }
             for child in element:
-                if infer_ecs_type(child) == "component":
+                child_ecs_type = infer_ecs_type(child)
+                if child_ecs_type == "component" or child_ecs_type == "datadef":
                     definition["children"].append({
                         "name": child.tag,
                         "type": get_element_type_name(child)
@@ -95,24 +118,45 @@ def analyze_element(element, entities, components, flat):
                         "type": infer_data_type(child.text)
                     })
             components[current_type_name] = definition
-        case "value":
-            # Only add them if their parent isn't a component
-            # as they will be defined locally within the component's complexType.
-            if element.getparent() is not None and infer_ecs_type(element.getparent()) != "component":
-                definition = {
+        case "datadef":
+            # This is a data definition, a container for values or other datadefs.
+            definition = {
                 "name": element.tag,
                 "absolute_name": current_type_name,
-                "type": infer_data_type(element.text)
-                }
-                flat[current_type_name] = definition
+                "ecs_type": element.attrib.get("type"),
+                "members": [],
+                "children": []
+            }
+            for child in element:
+                child_ecs_type = infer_ecs_type(child)
+                if child_ecs_type == "component" or child_ecs_type == "datadef":
+                    definition["children"].append({
+                        "name": child.tag,
+                        "type": get_element_type_name(child)
+                    })
+                else:  # It's a value/member field
+                    definition['members'].append({
+                        "name": child.tag,
+                        "type": infer_data_type(child.text)
+                    })
+            datadefs[current_type_name] = definition
+        case "value":
+            # Only add them if their parent isn't a component or datadef
+            # as they will be defined locally within the component's complexType.
+            if element.getparent() is not None:
+                parent_ecs_type = infer_ecs_type(element.getparent())
+                if parent_ecs_type != "component" and parent_ecs_type != "datadef":
+                    definition = {
+                    "name": element.tag,
+                    "absolute_name": current_type_name,
+                    "type": infer_data_type(element.text)
+                    }
+                    flat[current_type_name] = definition
 
     # After processing the current element, recurse into its children
     # to ensure their definitions are also created.
     for child in element:
-        analyze_element(child, entities, components, flat)
-
-            
-
+        analyze_element(child, entities, components, datadefs, flat)
 
 
 def generate_schema(xml_file_path, template_dir, template_name):
@@ -139,18 +183,27 @@ def generate_schema(xml_file_path, template_dir, template_name):
     # These dictionaries will hold the definitions for each unique type
     entities = {}
     components = {}
+    datadefs = {}
     flat = {}
     # Recurse over the children of the root, as root itself is not defined in the XSD
     for child in root:
-        analyze_element(child, entities, components, flat)
+        analyze_element(child, entities, components, datadefs, flat)
+
+
+    # For the root element's <xs:all>, we only want unique tag names.
+    all_defs = list(components.values()) + list(datadefs.values())
+    unique_root_refs = list({d['name']: d for d in all_defs}.values())
 
 
     template_context = {
         "root_element": root.tag,
+        "entity_base_name": "entitytag", # The common tag name for all entities
         # Reverse the order to have the innermost appear first, in order to satisfy dependencies
         #   Yes, this relies on dicts being ordered, which they are now
         "entities": list(entities.values())[::-1],
         "components": list(components.values())[::-1],
+        "datadefs": list(datadefs.values())[::-1],
+        "root_children_defs": unique_root_refs[::-1],
         "flat": list(flat.values())[::-1]
     }
 
