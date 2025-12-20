@@ -4,9 +4,9 @@ import typing
 import lxml.etree
 
 
-class Component:
+class Element:
     """
-    Base class for a component wrapper around an lxml element.
+    Base class for a Element wrapper around an lxml element.
     """
     def __init__(self, element: lxml.etree._Element):
         self._element = element
@@ -15,84 +15,154 @@ class Component:
 import binding_util
 
 
-
-
-{% for component in components %}
-class {{ component.class_name }}(Component):
+# -----------------
+# Data classes
+# -----------------
+{% for data in data_definitions %}
+class {{ data.class_name }}(Element):
     """
-    Represents the <{{ component.tag_name }}> component.
+    Wrapper for the `<{{ data.tag_name }}>` data element.
     """
+{% if data.simple_members %}
     # Simple member properties
-{% if component.tag_name == 'entitytag' %}
-    def __getattr__(self, name: str):
-        """
-        Dynamically access child components or simple values within this entity.
-        e.g., `my_entity.btag` or `my_entity.prefab`
-        """
-        # Check if it's a known component type
-        if name in TAG_TO_CLASS_MAP:
-            component_class = TAG_TO_CLASS_MAP[name]
-            element = self._element.find(name)
-            if element is not None:
-                return component_class(element)
-            return None
-
-        # Check if it's a known simple type
-        if name in SIMPLE_TYPE_MAP:
-            py_type = SIMPLE_TYPE_MAP[name]
-            element = self._element.find(name)
-            if element is not None and element.text is not None:
-                return py_type(element.text)
-            return None
-
-        # Fallback to default behavior
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-{% else %}
-{% for member in component.simple_members %}
+{% for member in data.simple_members %}
     @binding_util.cached_property
-    def {{ member.prop_name }}(self) -> {{ member.py_type }}:
+    def {{ member.prop_name }}(self) -> typing.Optional[{{ member.py_type }}]:
         """Gets the value of the <{{ member.tag_name }}> child element."""
-        # Assumes the element always exists, per the schema.
-        # .text will raise an AttributeError if find() returns None.
-        value = self._element.find("{{ member.tag_name }}").text
-        return {{ member.py_type }}(value) # Casts the string value to the correct type.
+        elem = self._element.find("{{ member.tag_name }}")
+        if elem is None or elem.text is None:
+            return None
+        return {{ member.py_type }}(elem.text)
 
     @{{ member.prop_name }}.setter
     def {{ member.prop_name }}(self, value: {{ member.py_type }}):
-        """Sets the value of the <{{ member.tag_name }}> child element."""
-        # Assumes the element always exists.
         elem = self._element.find("{{ member.tag_name }}")
+        if elem is None:
+            raise AttributeError("Missing element '{{ member.tag_name }}' in {{ data.tag_name }}")
         elem.text = str(value)
 
 {% endfor %}
-{% if component.sub_components %}
+{% endif %}
+{% if data.sub_components %}
     # Sub-component accessors
-{% endif %}
-{% for sub in component.sub_components %}
+{% for sub in data.sub_components %}
     @property
-    def {{ sub.prop_name }}(self) -> {{ sub.class_name }}:
-        """Accessor for the <{{ sub.tag_name }}> sub-component."""
-        # Assumes the sub-component always exists.
+    def {{ sub.prop_name }}(self) -> typing.Optional[{{ sub.class_name }}]:
         elem = self._element.find("{{ sub.tag_name }}")
-        return {{ sub.class_name }}(elem) # Wrap the found element in its class.
+        if elem is None:
+            return None
+        return {{ sub.class_name }}(elem)
 
 {% endfor %}
-{% if not component.simple_members and not component.sub_components %}
-    pass  # No members or sub-components defined in schema
 {% endif %}
+{% if not data.simple_members and not data.sub_components %}
+    pass
 {% endif %}
 
 {% endfor %}
 
-# These mappings defined last in order for their type's to be defined
-{# Create a mapping from tag names to the generated classes for dynamic lookup #}
-TAG_TO_CLASS_MAP = {
-{% for component in components %}
-    "{{ component.tag_name }}": {{ component.class_name }},
+
+# -----------------
+# Component classes (wrap a `<component>` element with a specific `type`)
+# -----------------
+{% for comp in component_definitions %}
+class {{ comp.class_name }}(Element):
+    """
+    Wrapper for a `<component type="{{ comp.variant }}">` element.
+    """
+{% if comp.simple_members %}
+    # Simple members directly inside the component
+{% for member in comp.simple_members %}
+    @binding_util.cached_property
+    def {{ member.prop_name }}(self) -> typing.Optional[{{ member.py_type }}]:
+        elem = self._element.find("{{ member.tag_name }}")
+        if elem is None or elem.text is None:
+            return None
+        return {{ member.py_type }}(elem.text)
+
+    @{{ member.prop_name }}.setter
+    def {{ member.prop_name }}(self, value: {{ member.py_type }}):
+        elem = self._element.find("{{ member.tag_name }}")
+        if elem is None:
+            raise AttributeError("Missing element '{{ member.tag_name }}' in component {{ comp.variant }}")
+        elem.text = str(value)
+
+{% endfor %}
+{% endif %}
+{% if comp.sub_components %}
+    # Sub-components referenced by this component (these are data-type child tags)
+{% for sub in comp.sub_components %}
+    @property
+    def {{ sub.prop_name }}(self) -> typing.Optional[{{ sub.class_name }}]:
+        elem = self._element.find("{{ sub.tag_name }}")
+        if elem is None:
+            return None
+        return {{ sub.class_name }}(elem)
+
+{% endfor %}
+{% endif %}
+{% if not comp.simple_members and not comp.sub_components %}
+    pass
+{% endif %}
+
+{% endfor %}
+
+
+# -----------------
+# Entity wrapper
+# -----------------
+{% if entity %}
+class {{ entity.class_name }}(Element):
+    """Wrapper for `<entitytag>` elements."""
+
+{% for child in entity.simple_children %}
+    @property
+    def {{ child }}(self) -> typing.Optional[typing.Any]:
+        elem = self._element.find("{{ child }}")
+        if elem is None or elem.text is None:
+            return None
+        py_type = SIMPLE_TYPE_MAP.get("{{ child }}")
+        if py_type is None:
+            return elem.text
+        return py_type(elem.text)
+
+{% endfor %}
+    def __getattr__(self, name: str):
+        """
+        Dynamically look up component variants by name.
+        E.g., entity.comp1 returns the <component type="comp1"> wrapper or None.
+        """
+        # Check if this name is a known component variant
+        if name in COMPONENT_VARIANT_MAP:
+            variant_class = COMPONENT_VARIANT_MAP[name]
+            for c in self._element.findall("component"):
+                if c.get("type") == name:
+                    return variant_class(c)
+            return None
+        # Fall back to default behavior
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+
+{% endif %}
+
+
+# -----------------
+# Runtime helper maps
+# -----------------
+# Map data tag names to their wrapper classes
+DATA_TAG_TO_CLASS_MAP = {
+{% for data in data_definitions %}
+    "{{ data.tag_name }}": {{ data.class_name }},
 {% endfor %}
 }
 
-{# Create a mapping from simple element tag names to their Python types #}
+# Map component variant names to the component wrapper classes
+COMPONENT_VARIANT_MAP = {
+{% for comp in component_definitions %}
+    "{{ comp.variant }}": {{ comp.class_name }},
+{% endfor %}
+}
+
+# Map simple element tag names to Python types
 SIMPLE_TYPE_MAP = {
 {% for name, py_type in simple_type_map.items() %}
     "{{ name }}": {{ py_type }},

@@ -64,46 +64,6 @@ class cached_property:
 import generated_bindings as gb
 
 
-class Entity:
-    def __init__(self, element: lxml.etree._Element):
-        self._element = element
-        # Dynamically create a new class that inherits from this one.
-        # This gives us a unique class for each instance to attach properties to,
-        # preventing conflicts while still allowing the property mechanism to work.
-        self.__class__ = type(self.__class__.__name__, (self.__class__,), {})
-        self._create_dynamic_properties_on_class()
-
-    def _create_dynamic_properties_on_class(self):
-        """
-        Inspects the entity's children and creates cached_property accessors
-        on the instance's unique class for each unique tag.
-        """
-        # Process unique tags to avoid creating multiple properties for the same tag name
-        for child in self._element:
-            tag_name = child.tag
-            if tag_name in gb.TAG_TO_CLASS_MAP:               
-                # Attach the property directly to the instance's __dict__
-                setattr(self, tag_name, gb.TAG_TO_CLASS_MAP[tag_name](child))
-
-            elif tag_name in gb.SIMPLE_TYPE_MAP:
-                py_type = gb.SIMPLE_TYPE_MAP[tag_name]
-
-                # Use default arguments to capture loop variables for the closures
-                def getter(instance, _tag=tag_name, _type=py_type, elem=child):
-                    print(elem, _tag, _type)
-                    return _type(elem.text) if elem is not None and elem.text is not None else None
-
-                def setter(instance, value, _tag=tag_name, elem=child):
-                    print(elem, _tag, value)
-                    if elem is not None:
-                        elem.text = str(value)
-
-                # Create the cached_property and attach it to the instance's class
-                prop = cached_property(getter)
-                prop = prop.setter(setter)
-                setattr(self.__class__, tag_name, prop)
-
-
 class File:
     """
     Represents a parsed XML file, providing access to its root-level components and entities.
