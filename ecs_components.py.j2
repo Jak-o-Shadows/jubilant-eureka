@@ -3,27 +3,57 @@ Generated tcod-ecs components from schema.
 DO NOT EDIT.
 """
 from __future__ import annotations
-
 from dataclasses import dataclass
 
+# -----------------
+# Data-Holding Components
+# -----------------
+{% for data in datadefs %}
+@dataclass(frozen=True, slots=True)
+class {{ data.class_name }}:
+    """
+    Represents the data fields for a <{{ data.tag_name }}> element.
+    """
+{% for member in data.simple_members %}
+    {{ member.prop_name }}: {{ member.py_type }}
+{% endfor %}
 
+{% if not data.simple_members %}
+    pass  # This component has no data fields.
+{% endif %}
+{% endfor %}
+
+# -----------------
+# Composite Components (from <component> variants)
+# -----------------
 {% for component in components %}
 @dataclass(frozen=True, slots=True)
 class {{ component.class_name }}:
     """
-    Represents the <{{ component.tag_name }}> component.
+    Represents the <component type="{{ component.variant }}"> variant.
     """
-{% for member in component.simple_members %}
-    {{ member.prop_name }}: {{ member.py_type }}
+{% for member in component.child_datadefs %}
+    {{ member.prop_name }}: {{ member.class_name }}
 {% endfor %}
-{% if not component.simple_members %}
-    pass  # This component has no data fields.
+{% if not component.child_datadefs %}
+    pass  # This component has no child data-definitions.
 {% endif %}
 
-
 {% endfor %}
-COMPONENT_MAP = {
+
+# -----------------
+# Maps
+# -----------------
+# Map data tag names to their dataclass
+DATA_CLASS_MAP = {
+{% for data in datadefs %}
+    "{{ data.tag_name }}": {{ data.class_name }},
+{% endfor %}
+}
+
+# Map component variant names to their dataclass
+COMPONENT_CLASS_MAP = {
 {% for component in components %}
-    "{{ component.tag_name }}": {{ component.class_name }},
+    "{{ component.variant }}": {{ component.class_name }},
 {% endfor %}
 }

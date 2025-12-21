@@ -261,3 +261,19 @@ if __name__ == "__main__":
         f.write(matlab_generated_code)
 
     print(f"MATLAB code generation complete. Bindings saved to '{matlab_output_file}'.")
+
+    # --- ECS Component Generation ---
+    print("\nGenerating ECS components...")
+    ecs_output_file = "ecs_components.py"
+    ecs_template_name = "ecs_components.py.j2"
+
+    ecs_template = env.get_template(ecs_template_name)
+    ecs_generated_code = ecs_template.render(
+        datadefs=data_definitions,
+        components=component_definitions
+    )
+
+    with open(ecs_output_file, "w", encoding="utf-8") as f:
+        f.write(ecs_generated_code)
+
+    print(f"ECS component generation complete. Components saved to '{ecs_output_file}'.")
