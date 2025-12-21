@@ -23,44 +23,58 @@ class {{ data.class_name }}(Element):
     """
     Wrapper for the `<{{ data.tag_name }}>` data element.
     """
+    TAG = "{{ data.tag_name }}"
+    """Tag name for the `<{{ data.tag_name }}>` element."""
+{% if data.simple_members %}
+{% for member in data.simple_members %}
+    TAG_{{ member.prop_name.upper() }} = "{{ member.tag_name }}"
+    """Tag name for the simple member `<{{ member.tag_name }}>`."""
+{% endfor %}
+{% endif %}
+{% if data.child_datadefs %}
+{% for sub in data.child_datadefs %}
+    TAG_{{ sub.prop_name.upper() }} = "{{ sub.tag_name }}"
+{% endfor %}
+{% endif %}
+
 {% if data.simple_members %}
     # Simple member properties
 {% for member in data.simple_members %}
     @binding_util.cached_property
-    def {{ member.prop_name }}(self) -> typing.Optional[{{ member.py_type }}]:
+    def {{ member.prop_name }}(self) -> {{ member.py_type }}:
         """Gets the value of the <{{ member.tag_name }}> child element."""
-        elem = self._element.find("{{ member.tag_name }}")
+        elem = self._element.find(self.TAG_{{ member.prop_name.upper() }})
         if elem is None or elem.text is None:
-            return None
+            raise AttributeError(f"Missing element (or empty) '{self.TAG_{{ member.prop_name.upper() }}}' in {self.TAG}")
         return {{ member.py_type }}(elem.text)
 
     @{{ member.prop_name }}.setter
     def {{ member.prop_name }}(self, value: {{ member.py_type }}):
-        elem = self._element.find("{{ member.tag_name }}")
+        elem = self._element.find(self.TAG_{{ member.prop_name.upper() }})
         if elem is None:
-            raise AttributeError("Missing element '{{ member.tag_name }}' in {{ data.tag_name }}")
+            raise AttributeError(f"Missing element '{self.TAG_{{ member.prop_name.upper() }}}' in {self.TAG}")
         elem.text = str(value)
-
 {% endfor %}
 {% endif %}
-{% if data.sub_components %}
-    # Sub-component accessors
-{% for sub in data.sub_components %}
+
+{% if data.child_datadefs %}
+    # Sub-child_datadefs accessors
+{% for sub in data.child_datadefs %}
     @property
     def {{ sub.prop_name }}(self) -> typing.Optional[{{ sub.class_name }}]:
-        elem = self._element.find("{{ sub.tag_name }}")
+        elem = self._element.find(self.TAG_{{ sub.prop_name.upper() }})
         if elem is None:
-            return None
+            raise AttributeError(f"Missing element '{self.TAG_{{ sub.prop_name.upper() }}}' in {self.TAG}")
         return {{ sub.class_name }}(elem)
 
 {% endfor %}
 {% endif %}
-{% if not data.simple_members and not data.sub_components %}
+
+{% if not data.simple_members and not data.child_datadefs %}
     pass
 {% endif %}
 
 {% endfor %}
-
 
 # -----------------
 # Component classes (wrap a `<component>` element with a specific `type`)
@@ -70,38 +84,33 @@ class {{ comp.class_name }}(Element):
     """
     Wrapper for a `<component type="{{ comp.variant }}">` element.
     """
+    TAG = "{{ comp.tag_name }}"
+    """Tag name for the `<{{ comp.tag_name }}>` element."""
 {% if comp.simple_members %}
-    # Simple members directly inside the component
 {% for member in comp.simple_members %}
-    @binding_util.cached_property
-    def {{ member.prop_name }}(self) -> typing.Optional[{{ member.py_type }}]:
-        elem = self._element.find("{{ member.tag_name }}")
-        if elem is None or elem.text is None:
-            return None
-        return {{ member.py_type }}(elem.text)
-
-    @{{ member.prop_name }}.setter
-    def {{ member.prop_name }}(self, value: {{ member.py_type }}):
-        elem = self._element.find("{{ member.tag_name }}")
-        if elem is None:
-            raise AttributeError("Missing element '{{ member.tag_name }}' in component {{ comp.variant }}")
-        elem.text = str(value)
-
+    TAG_{{ member.prop_name.upper() }} = "{{ member.tag_name }}"
+    """Tag name for the simple member `<{{ member.tag_name }}>`."""
 {% endfor %}
 {% endif %}
-{% if comp.sub_components %}
-    # Sub-components referenced by this component (these are data-type child tags)
-{% for sub in comp.sub_components %}
+{% if comp.child_datadefs %}
+{% for sub in comp.child_datadefs %}
+    TAG_{{ sub.prop_name.upper() }} = "{{ sub.tag_name }}"
+{% endfor %}
+{% endif %}
+
+{% if comp.child_datadefs %}
+    # Sub-child_datadefs accessors
+{% for sub in comp.child_datadefs %}
     @property
     def {{ sub.prop_name }}(self) -> typing.Optional[{{ sub.class_name }}]:
-        elem = self._element.find("{{ sub.tag_name }}")
+        elem = self._element.find(self.TAG_{{ sub.prop_name.upper() }})
         if elem is None:
-            return None
+            raise AttributeError(f"Missing element '{self.TAG_{{ sub.prop_name.upper() }}}' in {self.TAG}")
         return {{ sub.class_name }}(elem)
 
 {% endfor %}
 {% endif %}
-{% if not comp.simple_members and not comp.sub_components %}
+{% if not comp.child_datadefs %}
     pass
 {% endif %}
 
@@ -114,19 +123,34 @@ class {{ comp.class_name }}(Element):
 {% if entity %}
 class {{ entity.class_name }}(Element):
     """Wrapper for `<entitytag>` elements."""
+{% if entity.simple_members %}
+{% for member in entity.simple_members.values() %}
+    TAG_{{ member.prop_name.upper() }} = "{{ member.tag_name }}"
+    """Tag name for the simple member `<{{ member.tag_name }}>`."""
+{% endfor %}
+{% endif %}
 
-{% for child in entity.simple_children %}
-    @property
-    def {{ child }}(self) -> typing.Optional[typing.Any]:
-        elem = self._element.find("{{ child }}")
+{% if entity.simple_members %}
+    # Simple member properties
+{% for member in entity.simple_members.values() %}
+    @binding_util.cached_property
+    def {{ member.prop_name }}(self) -> {{ member.py_type }}:
+        """Gets the value of the <{{ member.tag_name }}> child element."""
+        elem = self._element.find(self.TAG_{{ member.prop_name.upper() }})
         if elem is None or elem.text is None:
-            return None
-        py_type = SIMPLE_TYPE_MAP.get("{{ child }}")
-        if py_type is None:
-            return elem.text
-        return py_type(elem.text)
+            raise AttributeError(f"Missing element (or empty) '{self.TAG_{{ member.prop_name.upper() }}}' in {self.TAG}")
+        return {{ member.py_type }}(elem.text)
+
+    @{{ member.prop_name }}.setter
+    def {{ member.prop_name }}(self, value: {{ member.py_type }}):
+        elem = self._element.find(self.TAG_{{ member.prop_name.upper() }})
+        if elem is None:
+            raise AttributeError(f"Missing element '{self.TAG_{{ member.prop_name.upper() }}}' in {self.TAG}")
+        elem.text = str(value)
 
 {% endfor %}
+{% endif %}
+
     def __getattr__(self, name: str):
         """
         Dynamically look up component variants by name.
@@ -151,7 +175,7 @@ class {{ entity.class_name }}(Element):
 # Map data tag names to their wrapper classes
 DATA_TAG_TO_CLASS_MAP = {
 {% for data in data_definitions %}
-    "{{ data.tag_name }}": {{ data.class_name }},
+    {{ data.class_name }}.TAG: {{ data.class_name }},
 {% endfor %}
 }
 

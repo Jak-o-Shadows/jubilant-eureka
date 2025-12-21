@@ -60,7 +60,7 @@ if __name__ == "__main__":
             "class_name": to_class_name(name),
             "tag_name": name,
             "simple_members": [],
-            "sub_components": [],
+            "child_datadefs": [],
         }
 
         if hasattr(xsd_element.type, "content") and hasattr(xsd_element.type.content, "iter_elements"):
@@ -70,7 +70,7 @@ if __name__ == "__main__":
                 max_occurs = getattr(child_elem, "max_occurs", 1)
 
                 if child_elem.ref:
-                    definition["sub_components"].append({
+                    definition["child_datadefs"].append({
                         "prop_name": to_snake_case(child_elem.name),
                         "class_name": to_class_name(child_elem.name),
                         "tag_name": child_elem.name,
@@ -96,103 +96,35 @@ if __name__ == "__main__":
         if name != "component":
             continue
         component_element = xsd_element
+        print(component_element)
         for alt in component_element.alternatives:
-            comp_type = alt.type.name
-            # Extract the variant name from the test string like "@type = 'comp1'"
-            variant_name = comp_type.split("_")[1]  # crude extraction, may not work forever. Should be able to get it from the `test`
+            component_xml_type = alt.type.name
+            if component_xml_type is None:
+                continue  # Skip - makes the type chcker happy
+            component_type = alt.elem.attrib["test"].split("'")[1]  # crude extraction from test attribute
+            print(f"Processing component type: {component_type} ({component_xml_type})")
 
             definition = {
-                "class_name": to_class_name(f"component_{variant_name}"),
-                "variant": variant_name,
-                # Component payload uses data element refs or simple children
-                "simple_members": [],
-                "sub_components": [],
+                "class_name": to_class_name(f"component_{component_type}"),
+                "variant": component_type,
+                # Component payload uses data element refs - no sinmple children
+                "child_datadefs": [],
             }
 
-            if hasattr(comp_type, "content") and hasattr(comp_type.content, "iter_elements"):
-                for child_elem in comp_type.content.iter_elements():
-                    min_occurs = getattr(child_elem, "min_occurs", 1)
-                    max_occurs = getattr(child_elem, "max_occurs", 1)
+            # Hence get the XML type definition for this alternative
+            component_variant = schema.types.get(component_xml_type)
+            #print(component_variant)
 
-                    if child_elem.ref:
-                        definition["sub_components"].append({
-                            "prop_name": to_snake_case(child_elem.name),
-                            "class_name": to_class_name(child_elem.name),
-                            "tag_name": child_elem.name,
-                            "min_occurs": min_occurs,
-                            "max_occurs": max_occurs,
-                        })
-                    else:
-                        definition["simple_members"].append({
-                            "prop_name": to_snake_case(child_elem.name),
-                            "py_type": map_xsd_to_python_type(child_elem.type.prefixed_name),
-                            "matlab_caster": map_xsd_to_matlab_caster(child_elem.type.prefixed_name),
-                            "tag_name": child_elem.name,
-                            "min_occurs": min_occurs,
-                            "max_occurs": max_occurs,
-                        })
-
-            component_definitions.append(definition)
-    print(f"Found {len(component_definitions)} component definitions.")
-
-    # --- Entity metadata (for <entitytag> special handling)
-    entity_info = None
-    entity_element = schema.elements.get("entitytag")
-    if entity_element and getattr(entity_element, "alternatives", None):
-        simple_children = set()
-        component_max_unbounded = False
-
-        for alt in entity_element.alternatives:
-            alt_type = alt.type
-            if hasattr(alt_type, "content") and hasattr(alt_type.content, "iter_elements"):
-                for child_elem in alt_type.content.iter_elements():
-                    # If the child is a reference to "component", treat specially
-                    if child_elem.ref and child_elem.name == "component":
-                        if getattr(child_elem, "max_occurs", 1) == xmlschema.helpers.UNBOUNDED or getattr(child_elem, "max_occurs", 1) == "unbounded":
-                            component_max_unbounded = True
-                    else:
-                        simple_children.add(child_elem.name)
-
-        entity_info = {
-            "class_name": to_class_name("entitytag"),
-            "tag_name": "entitytag",
-            "simple_children": sorted(simple_children),
-            "components_unbounded": component_max_unbounded,
-        }
-
-    # Create the simple type map for the template (simple elements -> Python type)
-    simple_type_map = {}
-    for name, xsd_element in schema.elements.items():
-        if not xsd_element.type.is_complex():
-            simple_type_map[name] = map_xsd_to_python_type(xsd_element.type.prefixed_name)
-
-    """
-    # ------------------------------------------------------------------
-    # Fallback: xmlschema may not populate element.alternatives in some
-    # versions or with certain schema constructs. If we didn't find any
-    # component definitions above, try scanning the declared types for
-    # component_*_type entries and build component definitions from those.
-    # ------------------------------------------------------------------
-    if not component_definitions:
-        for type_name, xsd_type in schema.types.items():
-            # Look for types named like 'component_comp1_type'
-            if isinstance(type_name, str) and type_name.startswith("component_") and type_name.endswith("_type"):
-                # Extract variant name between 'component_' and '_type'
-                variant = type_name[len("component_"):-len("_type")]
-                comp_type = xsd_type
-                definition = {
-                    "class_name": to_class_name(f"component_{variant}"),
-                    "variant": variant,
-                    "simple_members": [],
-                    "sub_components": [],
-                }
-
-                if hasattr(comp_type, "content") and hasattr(comp_type.content, "iter_elements"):
-                    for child_elem in comp_type.content.iter_elements():
+            if hasattr(component_variant, "content"):
+                if  hasattr(component_variant.content, "iter_elements"):
+                    #print("has content")
+                    for child_elem in component_variant.content.iter_elements():
                         min_occurs = getattr(child_elem, "min_occurs", 1)
                         max_occurs = getattr(child_elem, "max_occurs", 1)
+                        #print(child_elem.name)
+
                         if child_elem.ref:
-                            definition["sub_components"].append({
+                            definition["child_datadefs"].append({
                                 "prop_name": to_snake_case(child_elem.name),
                                 "class_name": to_class_name(child_elem.name),
                                 "tag_name": child_elem.name,
@@ -200,17 +132,77 @@ if __name__ == "__main__":
                                 "max_occurs": max_occurs,
                             })
                         else:
-                            definition["simple_members"].append({
-                                "prop_name": to_snake_case(child_elem.name),
-                                "py_type": map_xsd_to_python_type(child_elem.type.prefixed_name),
-                                "matlab_caster": map_xsd_to_matlab_caster(child_elem.type.prefixed_name),
-                                "tag_name": child_elem.name,
-                                "min_occurs": min_occurs,
-                                "max_occurs": max_occurs,
-                            })
+                            # This is a simple child? But it shouldn't be
+                            # TODO: Add warning message
+                            pass
 
-                component_definitions.append(definition)
+            print(f"Adding component definition for variant '{component_type}'")
+            component_definitions.append(definition)
 
+    print(f"Found {len(component_definitions)} component definitions.")
+
+    # --- Entity metadata (for <entitytag> special handling)
+    print("########### Processing entity definition... ##########")
+    entity_info = None
+    for name, xsd_element in schema.elements.items():
+        if name != "entitytag":
+            continue
+        entity_element = xsd_element
+        entity_info = {
+                "class_name": to_class_name(f"entity_{entity_element.name}"),
+                "tag_name": "entitytag",
+                "simple_members": {},  # This is a dict, because we have multipel entity variants, could get duplicates
+            }
+        for alt in entity_element.alternatives:
+            print(alt)
+            entity_xml_type = alt.type.name
+            entity_type = alt.elem.attrib["test"].split("'")[1]  # crude extraction from test attribute
+            print(f"Processing entity type: {entity_type} ({entity_xml_type})")
+
+
+
+            entity_variant = schema.types.get(entity_xml_type)
+
+            if hasattr(entity_variant, "content"):
+                if  hasattr(entity_variant.content, "iter_elements"):
+                    for child_elem in entity_variant.content.iter_elements():
+                        print(child_elem.name, child_elem.ref)
+                        if child_elem.name == "component":
+                            # It's a component reference - ignore, as those are handled dynamically
+                            print(f"Ignoring 'component' child element in entity definition: {child_elem.ref}")
+                            pass
+                        else:
+                            # Preserve multiplicity info to allow generating lists later
+                            min_occurs = getattr(child_elem, "min_occurs", 1)
+                            max_occurs = getattr(child_elem, "max_occurs", 1)
+
+                            if child_elem.ref:
+                                definition["child_datadefs"].append({
+                                    "prop_name": to_snake_case(child_elem.name),
+                                    "class_name": to_class_name(child_elem.name),
+                                    "tag_name": child_elem.name,
+                                    "min_occurs": min_occurs,
+                                    "max_occurs": max_occurs,
+                                })
+                            else:
+                                entity_info["simple_members"][child_elem.name] = {
+                                    "prop_name": to_snake_case(child_elem.name),
+                                    "py_type": map_xsd_to_python_type(child_elem.type.prefixed_name),
+                                    "matlab_caster": map_xsd_to_matlab_caster(child_elem.type.prefixed_name),
+                                    "tag_name": child_elem.name,
+                                    "min_occurs": min_occurs,
+                                    "max_occurs": max_occurs,
+                                }
+
+    print(f"Found {entity_info} entity type definitions")
+
+    # Create the simple type map for the template (simple elements -> Python type)
+    simple_type_map = {}
+    for name, xsd_element in schema.elements.items():
+        if not xsd_element.type.is_complex():
+            simple_type_map[name] = map_xsd_to_python_type(xsd_element.type.prefixed_name)
+
+    
     # If entity_info was not populated from element.alternatives, try a
     # similar fallback: scan types named 'entity_*_type' for simple children
     if entity_info is None:
@@ -234,7 +226,7 @@ if __name__ == "__main__":
                 "simple_children": sorted(simple_children),
                 "components_unbounded": component_max_unbounded,
             }
-    """
+    
     # Set up Jinja2 environment and render the template
     env = Environment(loader=FileSystemLoader(str(template_dir)), trim_blocks=True, lstrip_blocks=True)
     template = env.get_template(template_name)
