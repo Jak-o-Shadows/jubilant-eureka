@@ -1,7 +1,6 @@
 import functools
 import typing
 
-import lxml.etree
 
 # A unique object to act as a sentinel for uncached values.
 # This is more robust than using `None` as a sentinel, as `None` could be a valid cached value.
@@ -59,18 +58,3 @@ class cached_property:
         """Decorator to define the property's setter."""
         self.fset = fset
         return self
-
-
-import generated_bindings as gb
-
-
-class File:
-    """
-    Represents a parsed XML file, providing access to its root-level components and entities.
-    """
-    def __init__(self, filepath: str):
-        self._element = lxml.etree.parse(filepath).getroot()
-
-        entity_tag_name = "entitytag"
-        self.entities = [Entity(elem) for elem in self._element.findall(entity_tag_name)]
-        self.root_components = [elem for elem in self._element.iterchildren() if elem.tag != entity_tag_name]

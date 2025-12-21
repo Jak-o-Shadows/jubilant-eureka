@@ -3,6 +3,7 @@ import typing
 
 import lxml.etree
 
+import binding_util
 
 class Element:
     """
@@ -10,9 +11,6 @@ class Element:
     """
     def __init__(self, element: lxml.etree._Element):
         self._element = element
-
-# Late import to avoid circular dependency: binding_util.File -> generated_bindings -> binding_util.cached_property
-import binding_util
 
 
 # -----------------
@@ -121,7 +119,7 @@ class {{ comp.class_name }}(Element):
 # Entity wrapper
 # -----------------
 {% if entity %}
-class {{ entity.class_name }}(Element):
+class Entity(Element):
     """Wrapper for `<entitytag>` elements."""
 {% if entity.simple_members %}
 {% for member in entity.simple_members.values() %}

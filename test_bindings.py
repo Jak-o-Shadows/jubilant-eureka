@@ -3,7 +3,7 @@ import lxml
 import lxml.etree
 
 import binding_util
-import generated_bindings as gb
+import bindings as gb
 
 
 @pytest.fixture(scope="module")
@@ -17,9 +17,110 @@ def xml_root():
         pytest.fail(f"XML syntax error in file.xml: {e}")
 
 
-class TestComponentBindings:
+class TestCachedPropertyDecorator:
     """
-    A test suite for the generated lxml-backed data binding classes.
+    Unit tests for the `cached_property` decorator in isolation.
+    """
+
+    def test_setting_before_getting(self):
+        """Tests that setting a value before the first get works correctly."""
+        class MyClass:
+            def __init__(self):
+                self._value = 10
+
+            @binding_util.cached_property
+            def prop(self):
+                return self._value
+
+            @prop.setter
+            def prop(self, value):
+                self._value = value
+
+        instance = MyClass()
+        instance.prop = 20  # Set before any get
+        assert instance.prop == 20
+
+    def test_caching_none_value(self):
+        """Tests that a return value of None is correctly cached."""
+        class CallCounter:
+            def __init__(self):
+                self.calls = 0
+                self._value = None
+
+            @binding_util.cached_property
+            def prop(self):
+                self.calls += 1
+                return self._value
+
+        instance = CallCounter()
+        assert instance.prop is None  # First call, should compute
+        assert instance.calls == 1
+        assert instance.prop is None  # Second call, should be cached
+        assert instance.calls == 1, "Getter was called again for a cached None value."
+
+    def test_read_only_property(self):
+        """Tests that setting a property without a setter raises AttributeError."""
+        class MyClass:
+            @binding_util.cached_property
+            def read_only_prop(self):
+                return "you can't change me"
+
+        instance = MyClass()
+        with pytest.raises(AttributeError, match="can't set attribute 'read_only_prop'"):
+            instance.read_only_prop = "new value"
+
+    def test_instance_isolation(self):
+        """Tests that caches are isolated between different instances."""
+        class MyClass:
+            def __init__(self, initial_value):
+                self._value = initial_value
+
+            @binding_util.cached_property
+            def prop(self):
+                return self._value
+
+        instance1 = MyClass(1)
+        instance2 = MyClass(2)
+        assert instance1.prop == 1
+        assert instance2.prop == 2
+
+    def test_set_invalidates_and_recaches(self):
+        """Tests that setting a value invalidates the cache, and the next get re-caches."""
+        class CallCounter:
+            def __init__(self):
+                self.calls = 0
+                self._value = 100
+
+            @binding_util.cached_property
+            def prop(self):
+                self.calls += 1
+                return self._value
+
+            @prop.setter
+            def prop(self, value):
+                self._value = value
+
+        instance = CallCounter()
+
+        # First get: should compute and cache
+        assert instance.prop == 100
+        assert instance.calls == 1
+
+        # Set: should invalidate the cache
+        instance.prop = 200
+
+        # Second get: should re-compute and re-cache the new value
+        assert instance.prop == 200
+        assert instance.calls == 2, "Getter was not called again after setting the value."
+
+        # Third get: should use the new cache
+        assert instance.prop == 200
+        assert instance.calls == 2, "Getter was called again on a re-cached value."
+
+
+class TestDatadefBindings:
+    """
+    A test suite for the generated lxml-backed data binding classes. This is for the datadefs
     """
 
     def test_simple_getters(self, xml_root):
@@ -58,7 +159,7 @@ class TestComponentBindings:
 
     def test_sub_component_accessor(self, xml_root):
         """
-        Tests that properties for sub-components return a correctly wrapped instance.
+        Tests that properties for sub-data-defs return a correctly wrapped instance.
         """
         # Find the <dtag> which contains a sub-component
         dtag_element = xml_root.find(".//dtag[@type='d']")
@@ -114,25 +215,30 @@ class TestFileLoader:
         Tests that the File class correctly loads entities and root-level components.
         """
         # Use the File class as the main entry point
-        file_loader = binding_util.File("file.xml")
+        file_loader = gb.File("file.xml")
 
         # 1. Test entity loading
         entities = file_loader.entities
         assert len(entities) == 3, "Should find 3 entitytag elements"
-        assert all(isinstance(e, binding_util.Entity) for e in entities)
+        assert all(isinstance(e, gb.Entity) for e in entities)
 
         # 2. Test dynamic access to a component within an entity
         first_entity = entities[0]
-        btag_component = first_entity.btag # Dynamic access via __getattr__
-        assert isinstance(btag_component, gb.Btag)
-        assert btag_component.value1 == 3.2
+        # The first entity has a `comp1` component, which has btag and ctag datadefs
+        comp1_component = first_entity.comp1 # Dynamic access via __getattr__
+        assert isinstance(comp1_component, gb.ComponentComp1)
+        btag_datadef = comp1_component.btag
+        assert isinstance(btag_datadef, gb.Btag)
+        assert btag_datadef.value1 == 3.2
+        assert btag_datadef.value2 == "text"
+        assert btag_datadef.value3 == 3
 
         # 3. Test dynamic access to a simple value within an entity
         assert first_entity.prefab == "asdfaf"
         assert first_entity.blah == 3.0
 
         # 3. Test root component loading
-        root_components = file_loader.root_components
-        assert len(root_components) == 1
-        assert isinstance(root_components[0], gb.Ztag)
-        assert root_components[0].vv33 == 33
+        root_datadefs = file_loader.root_datadefs
+        assert len(root_datadefs) == 1
+        assert isinstance(root_datadefs[0], gb.Ztag)
+        assert root_datadefs[0].vv33 == 33
